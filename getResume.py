@@ -4,7 +4,7 @@ from pathlib import Path
 
 app = FastAPI()
 
-acceptedExtensions = ['.txt','.pdf', '.doc', '.docx']
+acceptedExtensions = ['.pdf','.docx']
 
 @app.post("/files/")
 async def getResume(file: UploadFile, jobDescription: Annotated[str, Form()]):
