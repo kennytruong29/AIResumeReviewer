@@ -1,34 +1,70 @@
 from typing import Annotated
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from pathlib import Path
-import pdfplumber
 from io import BytesIO
 from docx import Document
+from dotenv import load_dotenv
+import anthropic
+import pdfplumber
+import os
 
+load_dotenv()
 app = FastAPI()
-
-acceptedExtensions = ['.pdf','.docx']
+client = anthropic.Anthropic(
+    api_key=os.getenv('ANTHROPIC_API_KEY')
+)
+accepted_extensions = ['.pdf','.docx']
 
 @app.post("/files/")
-async def getResume(file: UploadFile, jobDescription: Annotated[str, Form()]):
-    fileExtension = Path(file.filename).suffix.lower()
+async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]):
+    file_extension = Path(file.filename).suffix.lower()
 
-    if fileExtension not in acceptedExtensions:
+    if file_extension not in accepted_extensions:
         raise HTTPException(status_code=400, detail="Incorrect file type uploaded")
     
-    fileBytes = await file.read()
-    content = BytesIO(fileBytes)
+    file_bytes = await file.read()
+    content = BytesIO(file_bytes)
 
-    if fileExtension == '.pdf':
-        return pullContentPDF(content)   
+    if file_extension == '.pdf':
+        raw_content = pull_content_pdf(content)   
     else:
-        return pullContentDoc(content)
+        raw_content = pull_content_doc(content)
     
-def pullContentPDF(file: BytesIO):
+    output = await provide_feedback(raw_content, job_description)
+    return output
+        
+    
+def pull_content_pdf(file: BytesIO) -> str:
     with pdfplumber.open(file) as pdf:
         return pdf.pages[0].extract_text(x_tolerance=1, y_tolerance=1)
     
-def pullContentDoc(file: BytesIO):
+def pull_content_doc(file: BytesIO) -> str:
     doc = Document(file)
     doc_content = [para.text for para in doc.paragraphs]
-    return doc_content
+    return " ".join(doc_content)
+
+
+async def provide_feedback(raw_content : str, job_description : str):
+    try:
+        message = client.messages.create(
+        max_tokens=1024,
+        system = """You are an expert technical recruiter. You specialize in helping software engineers land their next big job. You will be given someone's resume in text format and a job description.
+            Provide direct and structured feedback in regards to these things: Resume Structure, Content Quality and/or Redundancies, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
+            Your answer structure should be as follows: General feedback score, Resume Structure, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
+            You will always receive resume content first, then the job description. Do not answer until you receive both.""",
+        messages=[
+            {
+                "role": "user",
+                "content": f"Here is my raw resume: {raw_content} and here is the job description: {job_description}"
+            }
+        ],
+        model="claude-opus-4-8"
+    )
+        response = message.content[0].text
+        return response
+    except anthropic.APIConnectionError as e:
+        raise HTTPException(status_code=503, detail=e.__cause__)
+    except anthropic.RateLimitError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.__cause__)
+    except anthropic.APIStatusError as e:
+       raise HTTPException(status_code=e.status_code, detail=e.response)
