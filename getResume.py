@@ -16,7 +16,7 @@ client = anthropic.Anthropic(
 accepted_extensions = ['.pdf','.docx']
 
 @app.post("/files/")
-async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]):
+async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]) -> str:
     file_extension = Path(file.filename).suffix.lower()
 
     if file_extension not in accepted_extensions:
@@ -27,29 +27,36 @@ async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]):
     file_bytes = await file.read()
     content = BytesIO(file_bytes)
 
-    if file_extension == '.pdf':
-        raw_content = pull_content_pdf(content)   
-    else:
-        raw_content = pull_content_docx(content)
-
+    try:
+        if file_extension == '.pdf':
+            raw_content = pull_content_pdf(content)   
+        else:
+            raw_content = pull_content_docx(content)
+    except ValueError as value_error:
+        raise HTTPException(status_code=400, detail=str(value_error))
+    
     if raw_content is None or raw_content.strip() == "":
         raise HTTPException(status_code=400, detail="No text found in provided resume")
     
     output = await provide_feedback(raw_content, job_description)
     return output
         
-    
 def pull_content_pdf(file: BytesIO) -> str:
-    with pdfplumber.open(file) as pdf:
-        return pdf.pages[0].extract_text(x_tolerance=1, y_tolerance=1)
-    
+    try:
+        with pdfplumber.open(file) as pdf:
+            return pdf.pages[0].extract_text(x_tolerance=1, y_tolerance=1)
+    except Exception:
+        raise ValueError("Submitted file could not be parsed.")
+
 def pull_content_docx(file: BytesIO) -> str:
-    doc = Document(file)
-    doc_content = [para.text for para in doc.paragraphs]
-    return " ".join(doc_content)
+    try:
+        doc = Document(file)
+        doc_content = [para.text for para in doc.paragraphs]
+        return " ".join(doc_content)
+    except Exception:
+        raise ValueError("Submitted file could not be parsed.")
 
-
-async def provide_feedback(raw_content : str, job_description : str):
+async def provide_feedback(raw_content : str, job_description : str) -> str:
     try:
         message = client.messages.create(
         max_tokens = 1024,
@@ -63,7 +70,7 @@ async def provide_feedback(raw_content : str, job_description : str):
                 "content": f"Here is my raw resume: {raw_content} and here is the job description: {job_description}"
             }
         ],
-        model = "claude-opus-4-8"
+        model = "claude-sonnet-4-6"
     )
         response = message.content[0].text
         return response
@@ -73,3 +80,5 @@ async def provide_feedback(raw_content : str, job_description : str):
         raise HTTPException(status_code=e.status_code, detail=e.__cause__)
     except anthropic.APIStatusError as e:
         raise HTTPException(status_code=e.status_code, detail=e.response)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An unknown error has occurred.")
