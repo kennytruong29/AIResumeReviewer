@@ -21,6 +21,8 @@ async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]):
 
     if file_extension not in accepted_extensions:
         raise HTTPException(status_code=400, detail="Incorrect file type uploaded")
+    if job_description.strip() == "":
+        raise HTTPException(status_code=400, detail="No text found in job description")
     
     file_bytes = await file.read()
     content = BytesIO(file_bytes)
@@ -28,7 +30,10 @@ async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]):
     if file_extension == '.pdf':
         raw_content = pull_content_pdf(content)   
     else:
-        raw_content = pull_content_doc(content)
+        raw_content = pull_content_docx(content)
+
+    if raw_content is None or raw_content.strip() == "":
+        raise HTTPException(status_code=400, detail="No text found in provided resume")
     
     output = await provide_feedback(raw_content, job_description)
     return output
@@ -38,7 +43,7 @@ def pull_content_pdf(file: BytesIO) -> str:
     with pdfplumber.open(file) as pdf:
         return pdf.pages[0].extract_text(x_tolerance=1, y_tolerance=1)
     
-def pull_content_doc(file: BytesIO) -> str:
+def pull_content_docx(file: BytesIO) -> str:
     doc = Document(file)
     doc_content = [para.text for para in doc.paragraphs]
     return " ".join(doc_content)
@@ -47,18 +52,18 @@ def pull_content_doc(file: BytesIO) -> str:
 async def provide_feedback(raw_content : str, job_description : str):
     try:
         message = client.messages.create(
-        max_tokens=1024,
+        max_tokens = 1024,
         system = """You are an expert technical recruiter. You specialize in helping software engineers land their next big job. You will be given someone's resume in text format and a job description.
             Provide direct and structured feedback in regards to these things: Resume Structure, Content Quality and/or Redundancies, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
             Your answer structure should be as follows: General feedback score, Resume Structure, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
             You will always receive resume content first, then the job description. Do not answer until you receive both.""",
-        messages=[
+        messages = [
             {
                 "role": "user",
                 "content": f"Here is my raw resume: {raw_content} and here is the job description: {job_description}"
             }
         ],
-        model="claude-opus-4-8"
+        model = "claude-opus-4-8"
     )
         response = message.content[0].text
         return response
@@ -67,4 +72,4 @@ async def provide_feedback(raw_content : str, job_description : str):
     except anthropic.RateLimitError as e:
         raise HTTPException(status_code=e.status_code, detail=e.__cause__)
     except anthropic.APIStatusError as e:
-       raise HTTPException(status_code=e.status_code, detail=e.response)
+        raise HTTPException(status_code=e.status_code, detail=e.response)
