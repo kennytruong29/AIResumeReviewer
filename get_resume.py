@@ -15,6 +15,7 @@ client = anthropic.Anthropic(
 )
 accepted_extensions = ['.pdf','.docx']
 
+
 @app.post("/files/")
 async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]) -> str:
     file_extension = Path(file.filename).suffix.lower()
@@ -29,7 +30,7 @@ async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]) 
 
     try:
         if file_extension == '.pdf':
-            raw_content = pull_content_pdf(content)   
+            raw_content = pull_content_pdf(content)
         else:
             raw_content = pull_content_docx(content)
     except ValueError as value_error:
@@ -40,13 +41,15 @@ async def get_resume(file: UploadFile, job_description: Annotated[str, Form()]) 
     
     output = await provide_feedback(raw_content, job_description)
     return output
-        
+
+
 def pull_content_pdf(file: BytesIO) -> str:
     try:
         with pdfplumber.open(file) as pdf:
             return pdf.pages[0].extract_text(x_tolerance=1, y_tolerance=1)
     except Exception:
         raise ValueError("Submitted file could not be parsed.")
+
 
 def pull_content_docx(file: BytesIO) -> str:
     try:
@@ -56,22 +59,23 @@ def pull_content_docx(file: BytesIO) -> str:
     except Exception:
         raise ValueError("Submitted file could not be parsed.")
 
+
 async def provide_feedback(raw_content : str, job_description : str) -> str:
     try:
         message = client.messages.create(
-        max_tokens = 1024,
-        system = """You are an expert technical recruiter. You specialize in helping software engineers land their next big job. You will be given someone's resume in text format and a job description.
-            Provide direct and structured feedback in regards to these things: Resume Structure, Content Quality and/or Redundancies, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
-            Your answer structure should be as follows: General feedback score, Resume Structure, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
-            You will always receive resume content first, then the job description. Do not answer until you receive both.""",
-        messages = [
-            {
-                "role": "user",
-                "content": f"Here is my raw resume: {raw_content} and here is the job description: {job_description}"
-            }
-        ],
-        model = "claude-sonnet-4-6"
-    )
+            max_tokens = 1024,
+            system = """You are an expert technical recruiter. You specialize in helping software engineers land their next big job. You will be given someone's resume in text format and a job description.
+                Provide direct and structured feedback in regards to these things: Resume Structure, Content Quality and/or Redundancies, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
+                Your answer structure should be as follows: General feedback score, Resume Structure, Keyword Match, Quantifiable Achievements, Skills Alignment and Other Suggestions
+                You will always receive resume content first, then the job description. Do not answer until you receive both.""",
+            messages = [
+                {
+                    "role": "user",
+                    "content": f"Here is my raw resume: {raw_content} and here is the job description: {job_description}"
+                }
+            ],
+            model = "claude-sonnet-4-6"
+        )
         response = message.content[0].text
         return response
     except anthropic.APIConnectionError as e:
