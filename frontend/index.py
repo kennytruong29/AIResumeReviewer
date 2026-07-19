@@ -1,7 +1,10 @@
 import streamlit as st
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 import requests
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def form_submission():
     with st.form("Resume and JD"):
@@ -19,7 +22,7 @@ def form_submission():
 
 
 def process_input(uploaded_file: UploadedFile, job_description : str):
-    api_url = "http://127.0.0.1:8000/files/"
+    api_url = os.getenv('API_URL')
     form_file = {"file": uploaded_file}
     form_data = {"job_description": job_description}
     try:
