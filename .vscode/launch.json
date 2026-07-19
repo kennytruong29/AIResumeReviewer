@@ -1,0 +1,16 @@
+{
+    "configurations": [
+        {
+        "name": "Python: Module",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+                "getResume:app",
+    "--reload",
+    "--port",
+    "8000"
+        ]
+}
+    ]
+}
