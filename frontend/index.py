@@ -30,7 +30,6 @@ def process_input(uploaded_file: UploadedFile, job_description : str):
             response = requests.post(api_url, files = form_file, data = form_data)
             data = response.json()
             if response.status_code == 200:
-                st.success("API Call Successful!")
                 st.markdown(data)
             else:
                 st.error(icon="🚨", body = f"Error {response.status_code}: {data['detail']}")       
