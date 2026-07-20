@@ -40,6 +40,7 @@ def process_input(uploaded_file: UploadedFile, job_description : str):
 
 def main():
     st.title('AI Resume Reviewer')    
+    st.set_page_config(page_title="AI Resume Reviewer by Kenny Truong")
     form_submission()
 
 
